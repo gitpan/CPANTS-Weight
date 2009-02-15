@@ -3,8 +3,8 @@ abstract: 'Graph based weights for CPAN Distributions'
 author:
   - 'Adam Kennedy <adamk@cpan.org>'
 build_requires:
+  ExtUtils::MakeMaker: 6.11
   Test::More: 0.42
-  Test::Script: 1.03
 distribution_type: module
 generated_by: 'Module::Install version 0.79'
 license: perl
@@ -16,15 +16,18 @@ name: CPANTS-Weight
 no_index:
   directory:
     - inc
+    - share
     - t
 requires:
   Algorithm::Dependency: 1.108
   Algorithm::Dependency::Source::DBI: 0.05
   File::HomeDir: 0.82
+  File::ShareDir: 1.00
   File::Spec: 0.80
   ORDB::CPANTS: 0.03
   ORLite: 1.20
-  perl: 5.8.0
+  ORLite::Migrate: 0.02
+  perl: 5.8.5
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.01
+version: 0.02
