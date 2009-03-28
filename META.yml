@@ -5,8 +5,11 @@ author:
 build_requires:
   ExtUtils::MakeMaker: 6.11
   Test::More: 0.42
+  Test::Script: 1.03
+configure_requires:
+  ExtUtils::MakeMaker: 6.48
 distribution_type: module
-generated_by: 'Module::Install version 0.79'
+generated_by: 'Module::Install version 0.81'
 license: perl
 meta-spec:
   url: http://module-build.sourceforge.net/META-spec-v1.4.html
@@ -27,7 +30,8 @@ requires:
   ORDB::CPANTS: 0.03
   ORLite: 1.20
   ORLite::Migrate: 0.02
+  ORLite::Mirror: 1.12
   perl: 5.8.5
 resources:
   license: http://dev.perl.org/licenses/
-version: 0.02
+version: 0.06
