@@ -23,12 +23,14 @@ use warnings;
 use File::Spec                       3.2701 ();
 use File::HomeDir                      0.82 ();
 use File::ShareDir                     1.00 ();
+use DateTime                         0.4501 ();
+use CPAN::Version                       5.5 ();
 use Algorithm::Dependency             1.108 ();
 use Algorithm::Dependency::Weight           ();
 use Algorithm::Dependency::Source::DBI 0.05 ();
 use Algorithm::Dependency::Source::Invert   ();
 
-our $VERSION = '0.08';
+our $VERSION = '0.09';
 
 our $DEBUG;
 
@@ -50,14 +52,18 @@ use constant ORLITE_TIMELINE => File::Spec->catdir(
 
 use ORLite          1.20 ();
 use ORLite::Mirror  1.12 ();
-use ORLite::Migrate 0.02 {
+use ORLite::Migrate 0.03 {
 	file         => ORLITE_FILE,
 	create       => 1,
 	timeline     => ORLITE_TIMELINE,
-	user_version => 2,
+	user_version => 3,
 };
 
-# Load the CPANTS database (This could take a while...)
+# Download and load the CPAN Upload database
+use ORDB::CPANUploads 0.01;
+use ORDB::CPANTesters 0.08;
+
+# Download and load the CPANTS database
 use ORDB::CPANTS 0.03;
 
 # Common string fragments
@@ -129,12 +135,14 @@ sub run {
 	my @authors = ORDB::CPANTS::Author->select(
 		'where pauseid is not null'
 	);
+
 	trace("Loading CPANTS Distributions...");
 	my @dists = ORDB::CPANTS::Dist->select(
 		'where author not in ( select id from author where pauseid is null )'
 	);
+
 	trace("Loading Kwalitee...");
-	my $kwalitee   = ORDB::CPANTS->selectall_hashref(
+	my $kwalitee = ORDB::CPANTS->selectall_hashref(
 		'select * from kwalitee',
 		'dist',
 	);
@@ -145,15 +153,17 @@ sub run {
 	trace("Precalculating volatility...");
 	my $volatility = $self->algorithm_volatility->weight_all;
 
+	trace("Generating FAIL counts");
+	my $fails = CPANTS::Weight->fail_report;
+
 	# Populate the AuthorWeight objects
 	trace("Populating Author metrics...");
 	CPANTS::Weight->begin;
 	CPANTS::Weight::AuthorWeight->truncate;
 	foreach my $author ( @authors ) { ### Authors [===|    ] % done
 		# Find the list of distros for this author
-		my $id     = $author->id;
-		# my @ids    = grep { $_->author } @dists;
-		# my $weight = 
+		my $id    = $author->id;
+		# my @ids = grep { $_->author } @dists;
 		CPANTS::Weight::AuthorWeight->create(
 			id      => $author->id,
 			pauseid => $author->pauseid,
@@ -167,10 +177,10 @@ sub run {
 	CPANTS::Weight::DistWeight->truncate;
 	foreach my $dist ( @dists ) { ### Distributions [===|    ] % done
 		my $id = $dist->id;
-		my $k  = $kwalitee->{$id} || {};
 
 		# Does this distribution make life difficult
 		# for downstream packagers.
+		my $k = $kwalitee->{$id} || {};
 		my $enemy_downstream = $k->{easily_repackagable} ? 0 : 1;
 
 		# Is this distribution popular, but NOT provided in
@@ -203,9 +213,20 @@ sub run {
 			meta1            => $meta1,
 			meta2            => $meta2,
 			meta3            => $meta3,
+			fails            => $fails->{$dist->dist} || 0,
 		);
 	}
 	CPANTS::Weight->commit;
+
+	# Manually remove bogus records
+	my $sth = CPANTS::Weight->prepare('delete from dist_weight where dist = ?');
+	$sth->execute('Msql-Mysql-modules');
+	$sth->execute('HTTP-BrowserDetect');
+	$sth->execute('HTML-Widgets-Index');
+	$sth->execute('Text-Tabs+Wrap');
+	$sth->execute('FreeWRL');
+	$sth->execute('Apache-LoggedAuthDBI');
+	$sth->finish;
 
 	return 1;
 }
@@ -257,6 +278,54 @@ sub source_volatility {
 		);
 	}
 	return $self->{source_volatility};
+}
+
+# Generate a FAIL count report
+sub fail_report {
+	my %fail    = ();
+	my %version = ();
+
+	# Build the statement
+	my $rows = 0;
+	my $sth  = ORDB::CPANTesters->prepare(
+		'select dist, version, state from cpanstats where state in ( ?, ? )',
+	) or die("prepare: $DBI::errstr");
+	$sth->execute('cpan', 'fail') or die("execute: $DBI::errstr");
+	while ( my $row = $sth->fetchrow_arrayref ) {
+		my ($dist, $version, $state) = @$row;
+
+		# If this is the first time we've seen the distribution,
+		# create the entry for it
+		unless ( exists $fail{$dist} ) {
+			$fail{$dist}    = 0;
+			$version{$dist} = $version;
+		}
+
+		# Ignore developer releases and weird versions
+		next unless defined $version;
+		next unless $version =~ /^[\d\.]+$/;
+
+		# If the version is older than the current version,
+		# shortcut and go to the next row.
+		my $vcmp = CPAN::Version->vcmp($version{$dist}, $version);
+		if ( $vcmp < 0 ) {
+			next;
+		}
+
+		# If the version is newer than the current version,
+		# reset the current fail count back to zero.
+		if ( $vcmp > 0 ) {
+			$fail{$dist}    = 0;
+			$version{$dist} = $version;
+		}
+
+		# If the row is a fail record, increment the fail count
+		if ( $state eq 'fail' ) {
+			$fail{$dist}++;
+		}
+	}
+
+	return \%fail;
 }
 
 1;

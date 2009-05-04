@@ -21,6 +21,7 @@ README
 script/cpants-weight
 share/timeline/migrate-01.pl
 share/timeline/migrate-02.pl
+share/timeline/migrate-03.pl
 t/01_compile.t
 t/02_main.t
 t/03_run.t
