@@ -34,7 +34,7 @@ use ORDB::CPANTS                       0.05 ();
 use ORDB::CPANUploads                  0.04 ();
 use ORDB::CPANTesters                  0.09 ();
 
-our $VERSION = '0.14';
+our $VERSION = '0.15';
 
 our $DEBUG;
 
@@ -250,6 +250,7 @@ sub run {
 	$sth->execute('Text-Tabs+Wrap');
 	$sth->execute('FreeWRL');
 	$sth->execute('Apache-LoggedAuthDBI');
+	$sth->execute('Win32-File-Summary'); #contains Archive::Tar, IO::Zlib
 	$sth->finish;
 
 	return 1;
